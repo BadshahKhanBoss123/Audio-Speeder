@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audio Speeder</title>
+    <title>Vocal Speeder</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Use Inter font */
@@ -24,8 +24,8 @@
     <div class="bg-gray-800 rounded-lg shadow-xl p-6 relative overflow-hidden w-full max-w-4xl">
         
         <!-- Game Title -->
-        <h1 class="text-3xl font-bold text-center mb-4">Audio Speeder</h1>
-        <p class="text-center text-gray-400 mb-4">The quieter the sound, the faster you go! Use loud audio to slow down! Use your mouse to move up and down.</p>
+        <h1 class="text-3xl font-bold text-center mb-4">Vocal Speeder</h1>
+        <p class="text-center text-gray-400 mb-4">The quieter you are, the faster you go! Be loud to slow down. Use your mouse to move up and down.</p>
 
         <!-- Game Container -->
         <div id="gameContainer" class="relative w-[800px] h-[600px] max-w-full mx-auto">
@@ -45,17 +45,10 @@
 
             <!-- Modal: Start Game -->
             <div id="startModal" class="absolute inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-10 rounded-lg">
-                <h2 class="text-4xl font-bold mb-4">Welcome to Audio Speeder!</h2>
-                <p class="text-lg mb-4">Upload an audio file to play:</p>
-                <input type="file" id="audioUpload" accept="audio/*" class="mb-4 text-sm text-gray-300
-                    file:mr-4 file:py-2 file:px-4
-                    file:rounded-full file:border-0
-                    file:text-sm file:font-semibold
-                    file:bg-blue-100 file:text-blue-700
-                    hover:file:bg-blue-200 cursor-pointer">
-                <p id="fileError" class="text-red-500 mb-4 hidden h-6"></p> <!-- Added height to prevent layout shift -->
-                <button id="startButton" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg text-xl cursor-pointer transition-transform duration-150 active:scale-95 disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>
-                    Select a file
+                <h2 class="text-4xl font-bold mb-4">Welcome to Vocal Speeder!</h2>
+                <p class="text-lg mb-8">Allow microphone access to play.</p>
+                <button id="startButton" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg text-xl cursor-pointer transition-transform duration-150 active:scale-95">
+                    Start Game
                 </button>
             </div>
 
@@ -78,8 +71,6 @@
             const startModal = document.getElementById('startModal');
             const gameOverModal = document.getElementById('gameOverModal');
             const startButton = document.getElementById('startButton');
-            const audioUpload = document.getElementById('audioUpload'); // NEW
-            const fileError = document.getElementById('fileError'); // NEW
             const restartButton = document.getElementById('restartButton');
             const scoreDisplay = document.getElementById('scoreDisplay');
             const finalScore = document.getElementById('finalScore');
@@ -90,9 +81,7 @@
             
             // Audio State
             let audioContext, analyser, dataArray;
-            let decodedAudioBuffer = null; // NEW
-            let currentAudioSource = null; // NEW
-            const SILENCE_THRESHOLD = 0; // No ambient noise from a file
+            const SILENCE_THRESHOLD = 10; // Ambient noise floor
             const MAX_VOLUME = 70; // Volume for max speed (0-255 scale)
             
             // Game Constants
@@ -122,8 +111,10 @@
                 // Populate initial obstacles
                 spawnObstacles();
 
-                // Start audio playback from the buffer
-                startAudioPlayback(); // MODIFIED
+                // Start audio processing if not already started
+                if (!audioContext) {
+                    setupAudio();
+                }
 
                 // Stop any previous game loop
                 if (gameLoopId) {
@@ -132,27 +123,6 @@
                 
                 // Start the new game loop
                 gameLoop();
-            }
-
-            function startAudioPlayback() {
-                // Stop any existing audio source
-                if (currentAudioSource) {
-                    currentAudioSource.stop();
-                    currentAudioSource.disconnect();
-                }
-
-                if (!decodedAudioBuffer) return; // Should not happen if button is enabled
-
-                // Create a new source node
-                currentAudioSource = audioContext.createBufferSource();
-                currentAudioSource.buffer = decodedAudioBuffer;
-                currentAudioSource.loop = true; // Loop the audio
-                
-                // Connect it to the (existing) analyser
-                currentAudioSource.connect(analyser);
-                
-                // Start playing
-                currentAudioSource.start(0);
             }
 
             async function setupAudio() {
@@ -169,7 +139,13 @@
                     dataArray = new Uint8Array(bufferLength);
                 } catch (err) {
                     console.error('Error accessing microphone:', err);
-                    alert('Microphone access is required to play. Please allow access and refresh.');
+                    // Do not use alert
+                    startModal.classList.remove('hidden');
+                    const errorP = startModal.querySelector('p');
+                    if(errorP) {
+                        errorP.textContent = 'Microphone access is required. Please allow access and try again.';
+                        errorP.classList.add('text-red-400');
+                    }
                 }
             }
 
@@ -288,11 +264,6 @@
                 gameOver = true;
                 cancelAnimationFrame(gameLoopId);
 
-                // Stop the music
-                if (currentAudioSource) {
-                    currentAudioSource.stop();
-                }
-
                 finalScore.textContent = score;
                 gameOverModal.classList.remove('hidden');
                 gameOverModal.classList.add('flex');
@@ -314,67 +285,6 @@
 
             // Restart button
             restartButton.addEventListener('click', init);
-
-            // Audio file upload listener
-            audioUpload.addEventListener('change', async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-
-                startButton.textContent = "Loading...";
-                startButton.disabled = true;
-                fileError.classList.add('hidden');
-                
-                try {
-                    // Initialize AudioContext on user interaction
-                    if (!audioContext) {
-                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    }
-                    
-                    const reader = new FileReader();
-                    
-                    reader.onload = (readEvent) => {
-                        audioContext.decodeAudioData(readEvent.target.result)
-                            .then(buffer => {
-                                decodedAudioBuffer = buffer; // Store the decoded buffer
-                                
-                                // Setup analyser (only needs to be done once)
-                                if (!analyser) {
-                                    analyser = audioContext.createAnalyser();
-                                    analyser.fftSize = 128;
-                                    analyser.smoothingTimeConstant = 0.3;
-                                    const bufferLength = analyser.frequencyBinCount;
-                                    dataArray = new Uint8Array(bufferLength);
-                                    
-                                    // Connect analyser to output so we hear the music
-                                    analyser.connect(audioContext.destination);
-                                }
-
-                                startButton.textContent = "Start Game";
-                                startButton.disabled = false;
-                            })
-                            .catch(err => {
-                                console.error('Error decoding audio data:', err);
-                                fileError.textContent = 'Error: Could not decode audio file.';
-                                fileError.classList.remove('hidden');
-                                startButton.textContent = "Select a file";
-                            });
-                    };
-                    
-                    reader.onerror = () => {
-                        console.error('Error reading file');
-                        fileError.textContent = 'Error: Could not read file.';
-                        fileError.classList.remove('hidden');
-                        startButton.textContent = "Select a file";
-                    };
-                    
-                    reader.readAsArrayBuffer(file);
-
-                } catch (err) {
-                    console.error('Error setting up audio:', err);
-                    fileError.textContent = 'Error: Audio playback not supported.';
-                    fileError.classList.remove('hidden');
-                }
-            });
 
             // Mouse move listener
             canvas.addEventListener('mousemove', (e) => {
